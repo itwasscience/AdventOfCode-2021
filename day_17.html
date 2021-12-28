@@ -1,0 +1,290 @@
+<html>
+
+<head>
+    <style>
+        /* Box sizing rules */
+        *,
+        *::before,
+        *::after {
+            box-sizing: border-box;
+        }
+
+        /* Remove default margin */
+        body,
+        h1,
+        h2,
+        h3,
+        h4,
+        p,
+        figure,
+        blockquote,
+        dl,
+        dd {
+            margin: 0;
+        }
+
+        /* Remove list styles on ul, ol elements with a list role, which suggests default styling will be removed */
+        ul[role='list'],
+        ol[role='list'] {
+            list-style: none;
+        }
+
+        /* Set core root defaults */
+        html:focus-within {
+            scroll-behavior: smooth;
+        }
+
+        /* Set core body defaults */
+        body {
+            min-height: 100vh;
+            text-rendering: optimizeSpeed;
+            line-height: 1.5;
+        }
+
+        /* A elements that don't have a class get default styles */
+        a:not([class]) {
+            text-decoration-skip-ink: auto;
+        }
+
+        /* Make images easier to work with */
+        img,
+        picture {
+            max-width: 100%;
+            display: block;
+        }
+
+        /* Inherit fonts for inputs and buttons */
+        input,
+        button,
+        textarea,
+        select {
+            font: inherit;
+        }
+
+        /* Remove all animations, transitions and smooth scroll for people that prefer not to see them */
+        @media (prefers-reduced-motion: reduce) {
+            html:focus-within {
+                scroll-behavior: auto;
+            }
+
+            *,
+            *::before,
+            *::after {
+                animation-duration: 0.01ms !important;
+                animation-iteration-count: 1 !important;
+                transition-duration: 0.01ms !important;
+                scroll-behavior: auto !important;
+            }
+        }
+
+        body {
+            color: #111;
+            font-size: 16px;
+            background-color: #fafafa;
+        }
+
+        canvas {
+            position: relative;
+            border: 1px solid black;
+        }
+    </style>
+</head>
+
+<body>
+    <div style="padding: 1em">
+        <h1>Probe MKI</h1>
+        <canvas id="trench" width="600" , height="600"> </canvas>
+        <div style="margin-top: 1em">
+            <button onclick="find_coolest_firing_solution()">Find Coolest Firing Solution</button>
+        </div>
+        <div style="margin-top: 1em">
+            <label for="vx">X Velocity</label>
+            <input id="vx" type="number" value="0" />
+            <label for="vx">Y Velocity</label>
+            <input id="vy" type="number" value="0" />
+            <button onclick="fire()">FIRE!</button>
+        </div>
+        <div id="shot-info" style="display: none;">
+            <strong>Shot Result: <div style="display: inline-block;" id="shot-result"></div></strong>
+            <div><strong>Max Height:</strong><span id="max-height"></span></div>
+        </div>
+    </div>
+</body>
+<script>
+    /* INIT CANVAS */
+    const CANVAS_SCALE = 1.5;
+    const canvas = document.getElementById('trench');
+    const ctx = canvas.getContext('2d');
+    ctx.scale(CANVAS_SCALE, CANVAS_SCALE);
+    ctx.translate(canvas.width / 2 / CANVAS_SCALE, canvas.height / 2 / CANVAS_SCALE);
+
+    const target = {
+        x_min: 153,
+        x_max: 199,
+        y_min: -114,
+        y_max: -75
+    };
+
+    const sample_target = {
+        x_min: 20,
+        x_max: 30,
+        y_min: -10,
+        y_max: -5
+    }
+
+    function clone(object) { return JSON.parse(JSON.stringify(object)) }
+
+    function step(shots) {
+        last_shot = shots[shots.length - 1];
+        shot = clone(last_shot)
+
+        shot.x += shot.vx;
+        shot.y += shot.vy;
+
+        if (shot.vx > 0) {
+            shot.vx -= 1;
+        } else if (shot.vx < 0) {
+            shot.vx += 1;
+        }
+        shot.vy -= 1;
+        shots.push(shot)
+    }
+
+    function render_shot(target, shots) {
+        ctx.clearRect(0, 0, canvas.width / 2 / CANVAS_SCALE, canvas.height / 2 / CANVAS_SCALE);
+        /* Background */
+        ctx.fillStyle = '#363457';
+        ctx.fillRect(-(canvas.width / 2), -(canvas.height / 2), 600, 600);
+        /* Target */
+        ctx.fillStyle = '#8AEA92';
+        ctx.fillRect(
+            target.x_min,
+            -target.y_min,
+            target.x_max - target.x_min,
+            Math.abs(target.y_max) - Math.abs(target.y_min));
+        /* Submarine */
+        ctx.setLineDash([]);
+        ctx.fillStyle = '#E3C0D3';
+        ctx.strokeStyle = '#E3C0D3';
+        ctx.beginPath();
+        ctx.arc(0, 0, 3, 0, 2 * Math.PI);
+        ctx.stroke();
+        ctx.fill();
+
+        /* Pretty dashed-line for trajectory */
+        if (shots.length > 2) {
+            ctx.moveTo(shots[0].x, shots[0].y);
+            ctx.strokeStyle = '#DA2C38';
+            ctx.setLineDash([.25, .25]);
+            ctx.lineWidth = 2.5;
+            for (i = 1; i < shots.length - 2; i++) {
+                var xc = (shots[i].x + shots[i + 1].x) / 2;
+                var yc = (shots[i].y + shots[i + 1].y) / 2;
+                ctx.quadraticCurveTo(shots[i].x, -shots[i].y, xc, -yc);
+            }
+            ctx.quadraticCurveTo(shots[i].x, -shots[i].y, shots[i + 1].x, -shots[i + 1].y);
+            ctx.stroke();
+        }
+        /* Shot Step Pulses */
+        ctx.setLineDash([]);
+        const shot_radius = 2
+        shots.forEach(shot => {
+            ctx.strokeStyle = '#DA2C38';
+            ctx.fillStyle = '#DA2C38';
+            ctx.beginPath();
+            ctx.arc(shot.x, -shot.y + shot_radius / 2, shot_radius, 0, 2 * Math.PI);
+            ctx.stroke();
+            ctx.fill();
+        });
+    }
+
+    function is_in_target(shots, target) {
+        let hit = false;
+        shots.forEach(shot => {
+            if (target.x_min <= shot.x && target.x_max >= shot.x && target.y_min <= shot.y && target.y_max >= shot.y) {
+                hit = true;
+            }
+        })
+        return hit;
+    }
+
+    async function run_firing_solution(vx, vy, y_bound, render = false) {
+        let shot = {
+            x: 0,
+            y: 0,
+            vx: vx,
+            vy: vy,
+        }
+        let shots = [shot];
+        let i = 999;
+        while (i > y_bound) {
+            step(shots)
+            i = clone(shots[shots.length - 1].y);
+            if (render) {
+                await new Promise(r => setTimeout(r, 50));
+                render_shot(target, clone(shots));
+            }
+        }
+        return shots;
+    }
+
+    function find_max_height(shots) {
+        let max_height = 0;
+        shots.forEach(shot => {
+            if (shot.y > max_height) {
+                max_height = clone(shot.y);
+            }
+        })
+        return max_height;
+    }
+
+    async function fire() {
+        let vx = parseInt(document.getElementById("vx").value);
+        let vy = parseInt(document.getElementById("vy").value);
+        run_firing_solution(vx, vy, target.y_min - 10, true).then(shots => {
+            document.getElementById("shot-info").style.display = "block";
+            if (is_in_target(shots, target)) {
+                document.getElementById("shot-result").innerHTML = "<span style='color: #DA2C38'> HIT!</span>";
+            } else {
+                document.getElementById("shot-result").innerHTML = "<span style='color: #DA2C38'> Miss...</span>";
+            }
+            document.getElementById("max-height").innerText = find_max_height(shots);
+        });
+    }
+
+    function find_coolest_firing_solution() {
+        let max_height = 0;
+        for (let vx = 16; vx < 20; vx++) {
+            for (let vy = 0; vy < 1000; vy++) {
+                run_firing_solution(vx, vy, target.y_min - 10, false).then(shots => {
+                    if (is_in_target(shots, target)) {
+                        let shot_height = find_max_height(shots);
+                        if (shot_height > max_height) {
+                            max_height = clone(shot_height);
+                            document.getElementById("vx").value = vx;
+                            document.getElementById("vy").value = vy;
+                        }
+                    }
+                });
+            }
+        }
+    }
+
+    function find_all_firing_solutions() {
+        let num_solutions = 0;
+        for (let vx = 0; vx < 150; vx++) {
+            for (let vy = -100; vy < 500; vy++) {
+                run_firing_solution(vx, vy, target.y_min - 10, false).then(shots => {
+                    if (is_in_target(shots, target)) {
+                        num_solutions++;
+                        console.log(num_solutions);
+                    }
+                })
+            }
+        }
+    }
+
+    render_shot(target, []);
+</script>
+
+</html>
