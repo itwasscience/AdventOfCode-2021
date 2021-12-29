@@ -11,7 +11,7 @@ class Point:
 
 
 def neighbors(grid: Dict[Tuple[int, int], Point], location: Tuple[int, int]) -> List[Point]:
-    """Returns all four possible neighbors of a point. Out-of-bounds are points that have already been visited."""
+    """Returns all four possible neighbors of a point. Out-of-bounds are points are considered visited for BFS."""
     (y, x) = location
     return [
         grid.get((y - 1, x), Point(key=(y - 1, x), height=9, visited=True)),
@@ -83,7 +83,6 @@ def load_data() -> Dict[(int, int), Point]:
     with open("inputs/day_09.txt") as f:
         cave = f.read()
         lines = cave.replace("\r", "").split("\n")
-    # Build node objects in a 2d grid - This will not be used by the transversal algo, it's a temporary thing
     grid = {}
     for y in range(len(lines)):
         line = list(lines[y])
